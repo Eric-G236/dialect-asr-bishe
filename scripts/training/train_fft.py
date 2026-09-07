@@ -231,6 +231,10 @@ def select_checkpoint(output_dir: Path, avg_nbest_model: int) -> Path:
     if avg.exists():
         return avg
 
+    best = output_dir / "model.pt.best"
+    if best.exists():
+        return best
+
     candidates = sorted(
         (p for p in output_dir.glob("model.pt.ep*") if p.is_file()),
         key=lambda p: (
