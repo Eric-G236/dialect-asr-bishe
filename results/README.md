@@ -5,7 +5,7 @@
 | 实验 | 方法 | dev CER | test CER | 目录 |
 |---|---|---|---|---|
 | fft | 全参数微调（epoch 1 最优） | 6.5645% | 6.8077% | [fft](fft/README.md) |
-| frozen | 冻结微调 | 待补充 | 待补充 | frozen/ |
+| frozen | 冻结微调 | 8.2547% | 8.8128% | [frozen](frozen/README.md) |
 | lora | LoRA | 待补充 | 待补充 | lora/ |
 | dora | DoRA | 待补充 | 待补充 | dora/ |
 
