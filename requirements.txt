@@ -1,0 +1,8 @@
+# 建议在 Linux + NVIDIA GPU 环境下运行
+# torch 请按 CUDA 版本从官方源安装，例如：
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+
+funasr==1.4.14
+torch>=2.4
+soundfile
+matplotlib

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 数据与实验产物（不提交到仓库）
+*.wav
+*.log
+*.pt
+*.png
+*.jsonl
+*.tsv
+
+# 本地私有文件
+tools/
+thesis_*.txt
+test.py
+
+# 操作系统
+.DS_Store
+Thumbs.db
