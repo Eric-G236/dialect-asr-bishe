@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from funasr import AutoModel
 
@@ -35,20 +37,12 @@ def load_jsonl(path: Path) -> list[dict[str, str]]:
     return rows
 
 
-def evaluate_split(
+def generate_predictions(
     model: AutoModel,
-    manifest: Path,
-    split: str,
-    output_dir: Path,
+    rows: list[dict[str, str]],
     batch_size: int,
-    limit: int | None = None,
-) -> dict[str, object]:
-    """Evaluate one manifest and write all requested artifacts."""
-    rows = load_jsonl(manifest)
-    if limit:
-        rows = rows[:limit]
-    print(f"Evaluating {split}: {len(rows)} utterances", flush=True)
-
+) -> list[dict[str, str]]:
+    """Run ``model.generate`` over ``rows`` in batches and return predictions."""
     batch_inputs: list[str] = []
     batch_rows: list[dict[str, str]] = []
     predictions: list[dict[str, str]] = []
@@ -82,6 +76,68 @@ def evaluate_split(
         if len(batch_inputs) >= batch_size:
             flush_batch()
     flush_batch()
+    return predictions
+
+
+def _predict_shard(args: tuple[Any, ...]) -> list[dict[str, str]]:
+    """Worker entry point: load a model in this process and predict one shard."""
+    model_dir, device, rows, batch_size = args
+    os.environ["OMP_NUM_THREADS"] = "1"
+    try:
+        import torch
+
+        torch.set_num_threads(1)
+    except Exception:
+        pass
+    model = AutoModel(
+        model=str(model_dir),
+        device=str(device),
+        disable_update=True,
+    )
+    return generate_predictions(model, rows, batch_size)
+
+
+def evaluate_split(
+    model: AutoModel | None,
+    manifest: Path,
+    split: str,
+    output_dir: Path,
+    batch_size: int,
+    limit: int | None = None,
+    num_workers: int = 1,
+    model_dir: Path | None = None,
+    device: str = "cuda:0",
+) -> dict[str, object]:
+    """Evaluate one manifest and write all requested artifacts."""
+    rows = load_jsonl(manifest)
+    if limit:
+        rows = rows[:limit]
+    print(f"Evaluating {split}: {len(rows)} utterances", flush=True)
+
+    if num_workers > 1 and len(rows) > 1:
+        chunk_size = (len(rows) + num_workers - 1) // num_workers
+        chunks = [
+            rows[i : i + chunk_size]
+            for i in range(0, len(rows), chunk_size)
+            if rows[i : i + chunk_size]
+        ]
+        tasks = [
+            (str(model_dir), device, chunk, batch_size)
+            for chunk in chunks
+        ]
+        with multiprocessing.get_context("fork").Pool(processes=len(chunks)) as pool:
+            shard_results = pool.map(_predict_shard, tasks)
+        predictions: list[dict[str, str]] = []
+        for shard in shard_results:
+            predictions.extend(shard)
+    else:
+        if model is None:
+            model = AutoModel(
+                model=str(model_dir),
+                device=device,
+                disable_update=True,
+            )
+        predictions = generate_predictions(model, rows, batch_size)
 
     pred_path = output_dir / f"{split}.predictions.jsonl"
     with pred_path.open("w", encoding="utf-8") as f:
@@ -208,16 +264,19 @@ def main() -> int:
     parser.add_argument("--splits", default="dev,test")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--num-workers", type=int, default=1)
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
 
     os.environ.setdefault("OMP_NUM_THREADS", "8")
-    model = AutoModel(
-        model=args.model_dir,
-        device=args.device,
-        disable_update=True,
-    )
+    model = None
+    if args.num_workers <= 1:
+        model = AutoModel(
+            model=args.model_dir,
+            device=args.device,
+            disable_update=True,
+        )
 
     data_dir = Path(args.data_dir)
     output_dir = Path(args.output_dir)
@@ -235,6 +294,9 @@ def main() -> int:
             output_dir=output_dir,
             batch_size=args.batch_size,
             limit=args.limit,
+            num_workers=args.num_workers,
+            model_dir=Path(args.model_dir),
+            device=args.device,
         )
     return 0
 

@@ -1,0 +1,11 @@
+{
+  "split": "dev",
+  "num_utterances": 3429,
+  "total_ref_chars": 49463,
+  "total_errors": 3247,
+  "cer": 6.5645,
+  "overall_cer": 6.5645,
+  "substitutions": 2694,
+  "deletions": 392,
+  "insertions": 161
+}
