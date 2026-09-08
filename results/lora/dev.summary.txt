@@ -1,0 +1,8 @@
+split=dev
+num_utterances=3429
+total_ref_chars=49463
+total_errors=4457
+CER=9.0108%
+substitutions=3718
+deletions=465
+insertions=274

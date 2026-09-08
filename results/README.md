@@ -6,7 +6,7 @@
 |---|---|---|---|---|
 | fft | 全参数微调（epoch 1 最优） | 6.5645% | 6.8077% | [fft](fft/README.md) |
 | frozen | 冻结微调 | 8.2547% | 8.8128% | [frozen](frozen/README.md) |
-| lora | LoRA | 待补充 | 待补充 | lora/ |
+| lora | LoRA（rank 8） | 9.0108% | 9.6442% | [lora](lora/README.md) |
 | dora | DoRA | 待补充 | 待补充 | dora/ |
 
 基线（未微调 paraformer-large）：dev CER 9.0714%，test CER 9.7167%。
