@@ -40,6 +40,7 @@ class DoRALinear(nn.Linear, LoRALayer):
             self.lora_A = nn.Parameter(self.weight.new_zeros((r, in_features)))
             self.lora_B = nn.Parameter(self.weight.new_zeros((out_features, r)))
             self.lora_magnitude = nn.Parameter(torch.ones(out_features, 1))
+            self._magnitude_initialized = False
             self.scaling = self.lora_alpha / self.r
             self.weight.requires_grad = False
         self.reset_parameters()
@@ -50,11 +51,21 @@ class DoRALinear(nn.Linear, LoRALayer):
         return weight.T if self.fan_in_fan_out else weight
 
     def reset_parameters(self) -> None:
-        nn.Linear.reset_parameters(self)
         if hasattr(self, "lora_A"):
             nn.init.kaiming_uniform_(self.lora_A, a=5**0.5)
             nn.init.zeros_(self.lora_B)
             nn.init.ones_(self.lora_magnitude)
+            self._magnitude_initialized = False
+
+    def _ensure_magnitude_init(self) -> None:
+        """Set DoRA magnitude to the row-wise norm of the pretrained base."""
+        if self.r <= 0:
+            return
+        if not getattr(self, "_magnitude_initialized", False):
+            self.lora_magnitude.data = torch.linalg.norm(
+                self._T(self.weight), dim=1, keepdim=True
+            )
+            self._magnitude_initialized = True
 
     def _delta_weight(self) -> torch.Tensor:
         if self.r <= 0:
@@ -75,6 +86,7 @@ class DoRALinear(nn.Linear, LoRALayer):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.r <= 0:
             return F.linear(x, self._T(self.weight), self.bias)
+        self._ensure_magnitude_init()
         base = F.linear(x, self._T(self.weight))
         after_a = F.linear(self.lora_dropout(x), self.lora_A)
         after_b = F.linear(after_a, self.lora_B)
@@ -127,6 +139,7 @@ class DoRAMergedLinear(nn.Linear, LoRALayer):
                 )
             )
             self.lora_magnitude = nn.Parameter(torch.ones(out_features, 1))
+            self._magnitude_initialized = False
             self.scaling = self.lora_alpha / self.r
             self.weight.requires_grad = False
             self.lora_ind = self.weight.new_zeros(
@@ -142,11 +155,20 @@ class DoRAMergedLinear(nn.Linear, LoRALayer):
         return weight.T if self.fan_in_fan_out else weight
 
     def reset_parameters(self) -> None:
-        nn.Linear.reset_parameters(self)
         if hasattr(self, "lora_A"):
             nn.init.kaiming_uniform_(self.lora_A, a=5**0.5)
             nn.init.zeros_(self.lora_B)
             nn.init.ones_(self.lora_magnitude)
+            self._magnitude_initialized = False
+
+    def _ensure_magnitude_init(self) -> None:
+        if self.r <= 0 or not any(self.enable_lora):
+            return
+        if not getattr(self, "_magnitude_initialized", False):
+            self.lora_magnitude.data = torch.linalg.norm(
+                self._T(self.weight), dim=1, keepdim=True
+            )
+            self._magnitude_initialized = True
 
     def zero_pad(self, x: torch.Tensor) -> torch.Tensor:
         result = x.new_zeros((*x.shape[:-1], self.out_features))
@@ -184,6 +206,7 @@ class DoRAMergedLinear(nn.Linear, LoRALayer):
         base = F.linear(x, self._T(self.weight))
         if self.r <= 0 or not any(self.enable_lora):
             return base + (self.bias if self.bias is not None else 0.0)
+        self._ensure_magnitude_init()
         after_a = F.linear(self.lora_dropout(x), self.lora_A)
         after_b = F.conv1d(
             after_a.transpose(-2, -1),

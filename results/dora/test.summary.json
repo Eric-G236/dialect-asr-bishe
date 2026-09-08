@@ -1,0 +1,11 @@
+{
+  "split": "test",
+  "num_utterances": 3728,
+  "total_ref_chars": 53763,
+  "total_errors": 3724,
+  "cer": 6.9267,
+  "overall_cer": 6.9267,
+  "substitutions": 3042,
+  "deletions": 435,
+  "insertions": 247
+}
